@@ -1,76 +1,95 @@
 library("shiny")
 library("tidyverse")
+library("shinydashboard")
 library("ggtext")
 library("SIRImperfectVaccination")
+library("shinydashboard")
 
 
 # Define UI for application that draws a histogram
-ui <- fluidPage(
+ui <- dashboardPage(
 
     # Application title
-    titlePanel("Virulence evolution in response to medical interventions"),
-
-    # Sidebar with a slider input for number of bins 
-    sidebarLayout(
-        sidebarPanel(
-          radioButtons(inputId="which_ri"
-                       ,label=div(HTML("Which immunity should we vary on <em>x</em> axis?"))
-                       ,c(
-                         "r1" = 1
-                         ,"r2" = 2
-                         ,"r3" = 3
-                         ,"r4" = 4
-                          )
-                       ),
-            sliderInput("r1",
-                        div(HTML("Anti-(super)infection immunity: <em>r<sub>1</sub></em>")),
-                        min = 0,
-                        max = 1,
-                        step=0.05,
-                        value = 0),
-            sliderInput("r2",
-                        div(HTML("Anti-growth-rate immunity: <em>r<sub>2</sub></em>")),
-                        min = 0,
-                        max = 1,
-                        step=0.05,
-                        value = 0),
-            sliderInput("r3",
-                        div(HTML("Transmission-blocking immunity: <em>r<sub>3</sub></em>")),
-                        min = 0,
-                        max = 1,
-                        step=0.05,
-                        value = 0),
-            sliderInput("r4",
-                        div(HTML("Anti-toxin immunity: <em>r<sub>4</sub></em>")),
-                        min = 0,
-                        max = 1,
-                        step=0.05,
-                        value = 0),
-            sliderInput("f",
-                        div(HTML("Fraction vaccinated: <em>f</em>")),
-                        min = 0,
-                        max = 1,
-                        step=0.05,
-                        value = 0.2),
-            sliderInput("sigma",
-                        div(HTML("Probability of superinfection: <em>&#963;</em>")),
-                        min = 0,
-                        max = 5,
-                        step=0.25,
-                        value = 1),
-        ),
-
-        # Show a plot of the generated distribution
-        mainPanel=mainPanel(
-          fluidRow(
-            column(12,
-           plotOutput("virulencePlot"),
-           plotOutput("prevalencePlot")
-            )
-          ) # end fluidrow
-        ) # end mainpanel
-    ) #  end SideBarLayout
-) # end fluidPage
+    dashboardHeader(title="Theory of virulence"),
+    dashboardSidebar(
+      sidebarMenu(
+      menuItem("Trade-offs", tabName="tradeoffs", icon=icon("flash",lib="glyphicon"),selected=T)
+      ,menuItem("Interventions", tabName="interventions", icon=icon("plus-sign",lib="glyphicon"))
+      ,menuItem("Dynamics", tabName="dynamics", icon=icon("random",lib="glyphicon"))
+      )
+    )
+    ,dashboardBody(
+      # first the tab item with all the tradeoff stuff
+      tabItems(
+        tabItem(
+          tabName = "tradeoffs"
+          ,fluidRow(
+            h2("Potential shapes of trade-offs that involve virulence")
+          )
+        ) # end tabItem tradeoffs
+      ,tabItem(tabName="interventions"
+               ,fluidRow(
+                 h2("The evolution of virulence in response to different medical interventions")
+                 ,box(
+            
+                   radioButtons(inputId="which_ri"
+                         ,label=div(HTML("Which immunity should we vary on <em>x</em> axis?"))
+                         ,c(
+                           "r1" = 1
+                           ,"r2" = 2
+                           ,"r3" = 3
+                           ,"r4" = 4
+                            )
+                         ),
+              sliderInput("r1",
+                          div(HTML("Anti-(super)infection immunity: <em>r<sub>1</sub></em>")),
+                          min = 0,
+                          max = 1,
+                          step=0.05,
+                          value = 0),
+              sliderInput("r2",
+                          div(HTML("Anti-growth-rate immunity: <em>r<sub>2</sub></em>")),
+                          min = 0,
+                          max = 1,
+                          step=0.05,
+                          value = 0),
+              sliderInput("r3",
+                          div(HTML("Transmission-blocking immunity: <em>r<sub>3</sub></em>")),
+                          min = 0,
+                          max = 1,
+                          step=0.05,
+                          value = 0),
+              sliderInput("r4",
+                          div(HTML("Anti-toxin immunity: <em>r<sub>4</sub></em>")),
+                          min = 0,
+                          max = 1,
+                          step=0.05,
+                          value = 0),
+              sliderInput("f",
+                          div(HTML("Fraction vaccinated: <em>f</em>")),
+                          min = 0,
+                          max = 1,
+                          step=0.05,
+                          value = 0.2),
+              sliderInput("sigma",
+                          div(HTML("Probability of superinfection: <em>&#963;</em>")),
+                          min = 0,
+                          max = 5,
+                          step=0.25,
+                          value = 1),
+                 ), # end box
+              box(
+                 plotOutput("virulencePlot"),
+                 plotOutput("prevalencePlot")
+              )
+               ) # end fluidRow
+        ), # end interventions tabitem
+        tabItem(tabName = "dynamics"
+                 ,h2("Ecological and evolutionary dynamics of a disease")
+        )
+      ) # end tabitems
+    ) # end dashboard body
+) # end dashboardpage
 
 # Define server logic required to draw the resulting plot
 server <- function(input, output) {
