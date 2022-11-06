@@ -141,8 +141,32 @@ ui <- dashboardPage(
                ) # end fluidRow
         ), # end interventions tabitem
         tabItem(tabName = "dynamics"
-                 ,h2("Ecological and evolutionary dynamics of a disease")
-        )
+          ,fluidRow(
+            h2("Ecological and evolutionary dynamics of a disease"),
+              box(
+              sliderInput(inputId = "dynamic_delta"
+                          ,label = div(HTML("Mortality rate, <em>&#948;</em>"))
+                          ,min = -10
+                          ,max = 10
+                          ,step=1
+                          ,value = 1),
+            sliderInput(inputId = "dynamic_lambda"
+                        ,label = div(HTML("Influx of susceptibles, <em>&#955;</em>"))
+                        ,min = -10
+                        ,max = 30
+                        ,step=1
+                        ,value = 1)
+              ),  # end box
+            
+              box( 
+               plotOutput("plot_dynamic"),
+               plotOutput("plot_dynamic_log")
+              ), # end box
+              box( 
+               plotOutput("alpha_dynamic")
+              ) # end box
+          ) # end fluidrow
+        ) # end tabitem
       ) # end tabitems
     ) # end dashboard body
 ) # end dashboardpage
@@ -362,11 +386,6 @@ server <- function(input, output) {
             x0 <- -d -recovery 
             y0 <- -dgamma(v_optimum, gamma_intercept, gamma_slope)
             
-            print(x0)
-            print(y0)
-            print(yval)
-            print(v_optimum)
-            
             gplot <- gplot + geom_point(mapping = aes(x=v_optimum,
                                                       y=yval)) +
                             geom_segment(mapping=aes(x=x0
@@ -379,7 +398,105 @@ server <- function(input, output) {
         return(gplot)
     })
   
+    # the SIR model on tab 3
+    dynamicSIRdata <- reactive({
+        delta = input$dynamic_delta;
+        lambda = input$dynamic_lambda
+        
+        f = 0.3
+        n_i_t0 <- 5
+        n_s_t0 <- 100
+        
+        sol <- SIRImperfectVaccination::SIRsolver(
+            n_susceptible_init = n_s_t0
+            ,n_infected_init = n_i_t0
+            ,f = f
+            ,delta = delta
+            ,sigma=1
+            ,lambda=lambda
+            ,alpha_init = 1.75
+            ,r1 = 0
+            ,r2 = 0
+            ,r3 = 0
+            ,r4 = 0
+            ,maxt_eco = 1
+            ,maxt_evo = 5000
+            ,all_data=T)
+        
+        sol_l <- pivot_longer(sol
+                              ,cols=c(alpha,x,xprime,y,yprime)
+                              ,values_to="dynamic_value"
+                              ,names_to="dynamic_variable")
+        
+        return(sol_l)
+    }) # end dynamicSIRdata
   
+  output$plot_dynamic <- renderPlot({
+    
+    # get the data from the SIR model
+    the_data <- dynamicSIRdata()
+    
+    # remove alpha, we'll plot it later
+    the_data_f <- filter(the_data,
+                         !(as.character(dynamic_variable) %in% c("alpha")))
+    
+    print(sort(unique(the_data$dynamic_variable)))
+    
+    ggplot(data=the_data_f
+           ,mapping=aes(x=t_converge
+                        ,y=dynamic_value)) +
+      geom_line(mapping=aes(colour=dynamic_variable)) +
+      theme_classic(base_size= 15) +
+        xlab("Time step, t") +
+        ylab("Density") + 
+        labs(title = "Dynamics over time") +
+        scale_colour_manual(name=""
+                            ,values=c("#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00", "#CC79A7")
+                            ,breaks=c("x","xprime","y","yprime")
+                            ,labels=c("S","S, vaccinated", "I", "I, vaccinated"))
+      
+  }) # end output$plot_dynamic
+    
+  output$plot_dynamic_log <- renderPlot({
+    
+    # get the data from the SIR model
+    the_data <- dynamicSIRdata()
+    # remove alpha, we'll plot it later
+    the_data_f <- filter(the_data,
+                         !(as.character(dynamic_variable) %in% c("alpha")))
+    
+    ggplot(data=the_data_f
+           ,mapping=aes(x=t_converge
+                        ,y=log(dynamic_value))) +
+      geom_line(mapping=aes(colour=dynamic_variable)) +
+      theme_classic(base_size= 15) +
+        xlab("Time step, t") +
+        ylab("Log density") + 
+        scale_colour_manual(name=""
+                            ,values=c("#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00", "#CC79A7")
+                            ,breaks=c("x","xprime","y","yprime")
+                            ,labels=c("S","S, vaccinated", "I", "I, vaccinated"))
+  }) # end output$plot_dynamic
+  
+  
+  output$alpha_dynamic <- renderPlot({
+    
+    # get the data from the SIR model
+    the_data <- dynamicSIRdata()
+    
+    # get alpha
+    the_data_f <- filter(the_data,
+                         as.character(dynamic_variable) %in% c("alpha")
+                         )
+    
+    ggplot(data=the_data_f
+           ,mapping=aes(x=t_converge
+                        ,y=dynamic_value)) +
+      geom_line(mapping=aes(colour=dynamic_variable),show.legend=F) +
+      theme_classic(base_size= 15) +
+        xlab("Time step, t") +
+        ylab("Virulence") 
+  }) # end output$plot_dynamic
   
 }
 
