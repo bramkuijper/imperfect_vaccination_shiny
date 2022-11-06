@@ -2,8 +2,35 @@ library("shiny")
 library("tidyverse")
 library("shinydashboard")
 library("ggtext")
+library("shinyWidgets")
 library("SIRImperfectVaccination")
 library("shinydashboard")
+
+beta <- function(v, intercept, slope)
+{
+    return(intercept + v^slope)
+}
+
+dbeta <- function(v, intercept, slope)
+{
+    return(slope * v^(slope - 1.0))
+}
+
+gamma <- function(v,intercept, slope)
+{
+    return(intercept + v^slope)
+}
+
+dgamma <- function(v, intercept, slope)
+{
+    return(slope * v^(slope - 1.0))
+}
+
+# expression for R0:
+R0_tradeoff <- function(x, beta_intercept, gamma_intercept, beta_slope, gamma_slope, d)
+{
+    return(1.0 / (x + d + gamma(v=x, intercept=gamma_intercept, slope=gamma_slope))^2 * (dbeta(v=x, intercept=beta_intercept, slope=beta_slope) - beta(v=x, intercept=beta_intercept, slope=beta_slope) / (d + x + gamma(v = x, intercept=gamma_intercept, slope=gamma_slope)) * (1 + dgamma(v = x, intercept=gamma_intercept, slope=gamma_slope)) ))
+} # end R0 tradeoff
 
 
 # Define UI for application that draws a histogram
@@ -24,9 +51,38 @@ ui <- dashboardPage(
         tabItem(
           tabName = "tradeoffs"
           ,fluidRow(
-            h2("Potential shapes of trade-offs that involve virulence")
-          )
-        ) # end tabItem tradeoffs
+            h2("Potential shapes of trade-offs that involve virulence"),
+       
+              box( 
+               plotOutput("beta_plot"),
+                sliderInput("beta_slope",
+                            div(HTML("Curvature of transmission - mortality trade-off")),
+                            min = -1.5,
+                            max = 1.5,
+                            value = 0.5),
+                   ),
+              box(
+            plotOutput("gamma_plot"),
+            sliderInput("gamma_slope",
+                        div(HTML("Curvature of transmission - recovery trade-off")),
+                        min = -1.5,
+                        max = 1.5,
+                        value = -0.5),
+               ), # end box 
+        
+            switchInput(
+                inputId="optimize"
+                ,value=F
+                ,label="Mess with virulence evolution just yet?"
+                ,onLabel="Enjoy 🤞!"
+                ,offLabel="No thanks!"),
+            plotOutput("transmission_MVT")
+        
+            ), # end fluidrow
+            
+          ) # end tabItem tradeoffs 
+        
+      ######## INTERVENTIONS 
       ,tabItem(tabName="interventions"
                ,fluidRow(
                  h2("The evolution of virulence in response to different medical interventions")
@@ -191,6 +247,140 @@ server <- function(input, output) {
       theme(axis.title.x = ggtext::element_markdown()) +
       ylim(0,1)
     })
+  
+    output$beta_plot <- renderPlot({
+        
+        beta_slope <- input$beta_slope
+        
+        beta_data <- tibble(v=seq(0,10,0.01))
+        
+        intercept <- 0
+        
+        beta_data <- beta_data %>% mutate(
+            beta_output = beta(v, intercept, beta_slope)
+        )
+
+        ggplot(data=beta_data
+               ,mapping=aes(x=v,y=beta_output)) +
+              geom_line(colour="#006373",lwd=1.5) +
+              theme_classic(base_size=15) +
+                xlab("Virulence, v") +
+            ylab("Transmission rate") +
+            labs(title = "Virulence - transmission trade-off")
+    })
+    
+    output$gamma_plot <- renderPlot({
+        
+        gamma_slope <- input$gamma_slope
+        
+        gamma_data <- tibble(v=seq(0,10,0.01))
+        
+        intercept <- 0
+        
+        gamma_data <- gamma_data %>% mutate(
+            gamma_output = gamma(v, intercept, gamma_slope)
+        )
+
+        ggplot(data=gamma_data
+               ,mapping=aes(x=v,y=gamma_output)) +
+              geom_line(colour="#963d00",lwd=1.5) +
+              theme_classic(base_size= 15) +
+                xlab("Virulence, v") +
+                ylab("Host recovery rate") + 
+                labs(title = "Virulence - recovery trade-off")
+    })
+   
+    # plot of tranmission relative to host mortality rate
+    output$transmission_MVT <- renderPlot({
+        
+        vmax <- 10
+        # parameters used to optimize
+        gamma_slope <- input$gamma_slope
+        beta_slope <- input$beta_slope
+        beta_intercept <- 0
+        gamma_intercept <- 0
+        
+        # background mortality rate, we might set that as a value
+        # but not right now
+        d <- 1
+        
+        mort_transmission <- tibble(host_mortality=seq(-5,vmax,0.01))
+        
+        mort_transmission <- mutate(mort_transmission,
+            transmission=ifelse(host_mortality<0
+                                ,NA
+                                ,NA
+                                )
+        )
+        
+        v_optimum <- NA
+        
+        # only run this bit if we actually want to optimize
+        if (input$optimize)
+        {
+            
+            mort_transmission <- mutate(mort_transmission,
+                transmission=ifelse(host_mortality<0
+                                    ,NA
+                                    ,beta(host_mortality,beta_intercept,beta_slope))
+            )
+            
+            # plot the optimal line
+            v_optimum <- optimize(f=R0_tradeoff
+                                  ,maximum=F
+                                  ,beta_intercept=beta_intercept
+                                  ,gamma_intercept=gamma_intercept
+                                  ,beta_slope=beta_slope
+                                  ,gamma_slope=gamma_slope
+                                  ,d=d
+                                  ,interval=c(0,vmax))$minimum
+         
+        } # end if optimize
+        
+        gplot <- ggplot(data=mort_transmission   
+               ,mapping=aes(x=host_mortality,y=transmission)) +
+              geom_line(colour="blue",lwd=1.5) +
+              theme_classic(base_size= 15) +
+                xlab("Host mortality rate, 𝛼") +
+                ylab("Transmission rate") + 
+                labs(title = "Optimal virulence")
+        
+        # add the point
+        if (!is.na(v_optimum))
+        {
+            # calculate corresponding y value
+            yval = y=beta(v=v_optimum
+                             ,intercept=beta_intercept
+                             ,slope=beta_slope)
+            
+            recovery = gamma(v=v_optimum
+                             ,intercept=gamma_intercept
+                             ,slope=gamma_slope)
+            
+            # calculate where line crosses x axis 
+            # see Gandon et al 2001 Evolution
+            x0 <- -d -recovery 
+            y0 <- -dgamma(v_optimum, gamma_intercept, gamma_slope)
+            
+            print(x0)
+            print(y0)
+            print(yval)
+            print(v_optimum)
+            
+            gplot <- gplot + geom_point(mapping = aes(x=v_optimum,
+                                                      y=yval)) +
+                            geom_segment(mapping=aes(x=x0
+                                                  ,xend=v_optimum
+                                                  ,y=y0
+                                                  ,yend=yval)
+                                         ,linetype="dashed")
+        }
+        
+        return(gplot)
+    })
+  
+  
+  
 }
 
 # Run the application 
