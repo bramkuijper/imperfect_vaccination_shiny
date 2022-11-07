@@ -154,12 +154,18 @@ ui <- dashboardPage(
                         ,max = 30
                         ,step=1
                         ,value = 1),
-            sliderInput(inputId = "variance_virulence"
-                        ,label = div(HTML("Genetic variation in virulence <em>G<sub>v</sub></em>"))
+            sliderInput(inputId = "dynamic_variance_virulence"
+                        ,label = div(HTML("Genetic variation in virulence <em>G<sub>&#945;</sub></em>"))
                         ,min = 0
                         ,max = 0.5
                         ,step=0.01
-                        ,value = 0.1)
+                        ,value = 0.1),
+            sliderInput(inputId = "dynamic_f"
+                        ,label = div(HTML("Fraction vaccinated <em>f</em>"))
+                        ,min = 0
+                        ,max = 1.0
+                        ,step=0.05
+                        ,value = 0.2)
               ),  # end box
             
               box( 
@@ -404,9 +410,8 @@ server <- function(input, output) {
     dynamicSIRdata <- reactive({
         delta = input$dynamic_delta;
         lambda = input$dynamic_lambda
-        var_virulence = input$dynamic_lambda
-        
-        f = 0.3
+        var_virulence = input$dynamic_variance_virulence
+        f = input$dynamic_f
         n_i_t0 <- 5
         n_s_t0 <- 100
         
@@ -422,6 +427,7 @@ server <- function(input, output) {
             ,r2 = 0
             ,r3 = 0
             ,r4 = 0
+            ,eul_evo = var_virulence
             ,maxt_eco = 1
             ,maxt_evo = 5000
             ,all_data=T)
