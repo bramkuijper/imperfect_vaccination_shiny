@@ -4,8 +4,6 @@ library("shinydashboard")
 library("ggtext")
 library("shinyWidgets")
 library("SIRImperfectVaccination")
-library("shinydashboard")
-
 beta <- function(v, intercept, slope)
 {
     return(intercept + v^slope)
@@ -155,14 +153,18 @@ ui <- dashboardPage(
                         ,min = -10
                         ,max = 30
                         ,step=1
-                        ,value = 1)
+                        ,value = 1),
+            sliderInput(inputId = "variance_virulence"
+                        ,label = div(HTML("Genetic variation in virulence <em>G<sub>v</sub></em>"))
+                        ,min = 0
+                        ,max = 0.5
+                        ,step=0.01
+                        ,value = 0.1)
               ),  # end box
             
               box( 
                plotOutput("plot_dynamic"),
-               plotOutput("plot_dynamic_log")
-              ), # end box
-              box( 
+               plotOutput("plot_dynamic_log"),
                plotOutput("alpha_dynamic")
               ) # end box
           ) # end fluidrow
@@ -402,6 +404,7 @@ server <- function(input, output) {
     dynamicSIRdata <- reactive({
         delta = input$dynamic_delta;
         lambda = input$dynamic_lambda
+        var_virulence = input$dynamic_lambda
         
         f = 0.3
         n_i_t0 <- 5
