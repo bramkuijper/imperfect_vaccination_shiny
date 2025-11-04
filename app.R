@@ -1,25 +1,31 @@
+library("Rcpp")
 library("shiny")
 library("tidyverse")
 library("shinydashboard")
+library("shinyjs")
 library("ggtext")
 library("shinyWidgets")
-library("SIRImperfectVaccination")
-beta <- function(v, intercept, slope)
+
+if (!require("SIRImperfectVaccination")) {
+    devtools::install_github("bramkuijper/SIRImperfectVaccination")
+}
+
+beta_trans <- function(v, intercept, slope)
 {
     return(intercept + v^slope)
 }
 
-dbeta <- function(v, intercept, slope)
+dbeta_trans <- function(v, intercept, slope)
 {
     return(slope * v^(slope - 1.0))
 }
 
-gamma <- function(v,intercept, slope)
+gamma_trans <- function(v,intercept, slope)
 {
     return(intercept + v^slope)
 }
 
-dgamma <- function(v, intercept, slope)
+dgamma_trans <- function(v, intercept, slope)
 {
     return(slope * v^(slope - 1.0))
 }
@@ -27,7 +33,9 @@ dgamma <- function(v, intercept, slope)
 # expression for R0:
 R0_tradeoff <- function(x, beta_intercept, gamma_intercept, beta_slope, gamma_slope, d)
 {
-    return(1.0 / (x + d + gamma(v=x, intercept=gamma_intercept, slope=gamma_slope))^2 * (dbeta(v=x, intercept=beta_intercept, slope=beta_slope) - beta(v=x, intercept=beta_intercept, slope=beta_slope) / (d + x + gamma(v = x, intercept=gamma_intercept, slope=gamma_slope)) * (1 + dgamma(v = x, intercept=gamma_intercept, slope=gamma_slope)) ))
+    return(beta_trans(v=x, intercept=beta_intercept, slope = beta_slope) / 
+             (x + d + gamma_trans(v=x, intercept=gamma_intercept, slope=gamma_slope))) #0 * (dbeta(v=x, intercept=beta_intercept, slope=beta_slope) - beta(v=x, intercept=beta_intercept, slope=beta_slope) / (d + x + gamma(v = x, intercept=gamma_intercept, slope=gamma_slope)) * (1 + dgamma(v = x, intercept=gamma_intercept, slope=gamma_slope)) ))
+    #return(1.0 / (x + d + gamma(v=x, intercept=gamma_intercept, slope=gamma_slope))^2 * (dbeta(v=x, intercept=beta_intercept, slope=beta_slope) - beta(v=x, intercept=beta_intercept, slope=beta_slope) / (d + x + gamma(v = x, intercept=gamma_intercept, slope=gamma_slope)) * (1 + dgamma(v = x, intercept=gamma_intercept, slope=gamma_slope)) ))
 } # end R0 tradeoff
 
 
@@ -60,13 +68,13 @@ ui <- dashboardPage(
                             value = 0.5),
                    ),
               box(
-            plotOutput("gamma_plot"),
-            sliderInput("gamma_slope",
-                        div(HTML("Curvature of transmission - recovery trade-off")),
-                        min = -1.5,
-                        max = 1.5,
-                        value = -0.5),
-               ), # end box 
+              plotOutput("gamma_plot"),
+              sliderInput("gamma_slope",
+                          div(HTML("Curvature of transmission - recovery trade-off")),
+                          min = -1.5,
+                          max = 1.5,
+                          value = -0.5),
+                 ), # end box 
         
             switchInput(
                 inputId="optimize"
@@ -83,7 +91,8 @@ ui <- dashboardPage(
       ######## INTERVENTIONS 
       ,tabItem(tabName="interventions"
                ,fluidRow(
-                 h2("The evolution of virulence in response to different medical interventions")
+                  useShinyjs(),
+                  h2("The evolution of virulence in response to different medical interventions")
                  ,box(
             
                    radioButtons(inputId="which_ri"
@@ -93,32 +102,41 @@ ui <- dashboardPage(
                            ,"r2" = 2
                            ,"r3" = 3
                            ,"r4" = 4
-                            )
+                            ),
+                         selected=1
                          ),
-              sliderInput("r1",
+              conditionalPanel(condition = "input.which_ri != '1'",
+                sliderInput("r1",
                           div(HTML("Anti-(super)infection immunity: <em>r<sub>1</sub></em>")),
                           min = 0,
                           max = 1,
                           step=0.05,
-                          value = 0),
-              sliderInput("r2",
-                          div(HTML("Anti-growth-rate immunity: <em>r<sub>2</sub></em>")),
-                          min = 0,
-                          max = 1,
-                          step=0.05,
-                          value = 0),
-              sliderInput("r3",
-                          div(HTML("Transmission-blocking immunity: <em>r<sub>3</sub></em>")),
-                          min = 0,
-                          max = 1,
-                          step=0.05,
-                          value = 0),
-              sliderInput("r4",
-                          div(HTML("Anti-toxin immunity: <em>r<sub>4</sub></em>")),
-                          min = 0,
-                          max = 1,
-                          step=0.05,
-                          value = 0),
+                          value = 0)
+                          ),
+              conditionalPanel(condition = "input.which_ri != '2'",
+                sliderInput("r2",
+                            div(HTML("Anti-growth-rate immunity: <em>r<sub>2</sub></em>")),
+                            min = 0,
+                            max = 1,
+                            step=0.05,
+                            value = 0)
+                ),
+              conditionalPanel(condition = "input.which_ri != '3'",
+                sliderInput("r3",
+                            div(HTML("Transmission-blocking immunity: <em>r<sub>3</sub></em>")),
+                            min = 0,
+                            max = 1,
+                            step=0.05,
+                            value = 0)
+              ),
+              conditionalPanel(condition = "input.which_ri != '4'",
+                sliderInput("r4",
+                            div(HTML("Anti-toxin immunity: <em>r<sub>4</sub></em>")),
+                            min = 0,
+                            max = 1,
+                            step=0.05,
+                            value = 0)
+              ),
               sliderInput("f",
                           div(HTML("Fraction vaccinated: <em>f</em>")),
                           min = 0,
@@ -194,7 +212,7 @@ server <- function(input, output) {
       
       sigma <- input$sigma
       
-      which_r <- input$which_ri
+      which_r <- as.numeric(input$which_ri)
       
       for (r_i_idx in 1:length(r_i_data))
       {
@@ -243,7 +261,7 @@ server <- function(input, output) {
       } # end for()
       
       return(data.frame(r=r_i_data,alpha=alpha_data,prevalence=prevalence_data))
-    })
+    }) # end virulence_data()
     
   
   # make the virulence plot
@@ -262,7 +280,7 @@ server <- function(input, output) {
       theme(axis.title.x = ggtext::element_markdown()
             ,axis.title.y = ggtext::element_markdown()
             )
-    })
+    }) #virulence vs vaccine efficacy
   
   output$prevalencePlot <- renderPlot({
     
@@ -278,8 +296,9 @@ server <- function(input, output) {
             ,x="Vaccine efficacy, *r*") +
       theme(axis.title.x = ggtext::element_markdown()) +
       ylim(0,1)
-    })
+    }) # disease prevalence plot
   
+    # plot the transmission rate versus v
     output$beta_plot <- renderPlot({
         
         beta_slope <- input$beta_slope
@@ -289,7 +308,7 @@ server <- function(input, output) {
         intercept <- 0
         
         beta_data <- beta_data %>% mutate(
-            beta_output = beta(v, intercept, beta_slope)
+            beta_output = beta_trans(v, intercept, beta_slope)
         )
 
         ggplot(data=beta_data
@@ -299,7 +318,7 @@ server <- function(input, output) {
                 xlab("Virulence, v") +
             ylab("Transmission rate") +
             labs(title = "Virulence - transmission trade-off")
-    })
+    }) # end trade-off plot beta
     
     output$gamma_plot <- renderPlot({
         
@@ -310,7 +329,7 @@ server <- function(input, output) {
         intercept <- 0
         
         gamma_data <- gamma_data %>% mutate(
-            gamma_output = gamma(v, intercept, gamma_slope)
+            gamma_output = gamma_trans(v, intercept, gamma_slope)
         )
 
         ggplot(data=gamma_data
@@ -320,9 +339,10 @@ server <- function(input, output) {
                 xlab("Virulence, v") +
                 ylab("Host recovery rate") + 
                 labs(title = "Virulence - recovery trade-off")
-    })
+    }) # end trade-off plot gamma
    
     # plot of tranmission relative to host mortality rate
+    # UPDATE: we will just plot per-hos transmission rat
     output$transmission_MVT <- renderPlot({
         
         vmax <- 10
@@ -354,19 +374,19 @@ server <- function(input, output) {
             mort_transmission <- mutate(mort_transmission,
                 transmission=ifelse(host_mortality<0
                                     ,NA
-                                    ,beta(host_mortality,beta_intercept,beta_slope))
+                                    ,beta_trans(host_mortality,beta_intercept,beta_slope))
             )
             
             # plot the optimal line
             v_optimum <- optimize(f=R0_tradeoff
-                                  ,maximum=F
+                                  ,maximum=T
                                   ,beta_intercept=beta_intercept
                                   ,gamma_intercept=gamma_intercept
                                   ,beta_slope=beta_slope
                                   ,gamma_slope=gamma_slope
                                   ,d=d
-                                  ,interval=c(0,vmax))$minimum
-         
+                                  ,interval=c(0,vmax))$maximum
+            
         } # end if optimize
         
         gplot <- ggplot(data=mort_transmission   
@@ -381,30 +401,47 @@ server <- function(input, output) {
         if (!is.na(v_optimum))
         {
             # calculate corresponding y value
-            yval = y=beta(v=v_optimum
+            yval = y=beta_trans(v=v_optimum
                              ,intercept=beta_intercept
                              ,slope=beta_slope)
             
-            recovery = gamma(v=v_optimum
+            recovery = gamma_trans(v=v_optimum
                              ,intercept=gamma_intercept
                              ,slope=gamma_slope)
             
             # calculate where line crosses x axis 
             # see Gandon et al 2001 Evolution
-            x0 <- -d -recovery 
-            y0 <- -dgamma(v_optimum, gamma_intercept, gamma_slope)
+            x0 <- -d -recovery
+            y0 <- 0 
+            x1 <- v_optimum
+            y1 <- yval
             
-            gplot <- gplot + geom_point(mapping = aes(x=v_optimum,
-                                                      y=yval)) +
-                            geom_segment(mapping=aes(x=x0
-                                                  ,xend=v_optimum
+            slope = (y1 - y0) / (x1 - x0)
+            
+            intercept = abs((d + recovery))*slope
+            
+            # let max y be max_beta 
+            yend = beta_trans(v = vmax, intercept = beta_intercept, slope = beta_slope)
+            
+            # now take inverse to calculate xend
+            xend = (yend - intercept) / slope
+            
+            
+            gplot <- gplot + geom_segment(mapping=aes(x=x0
+                                                  ,xend=xend
                                                   ,y=y0
-                                                  ,yend=yval)
-                                         ,linetype="dashed")
+                                                  ,yend=yend)
+                                         ,linetype="dashed") +
+              geom_point(mapping = aes(x=v_optimum,
+                                                      y=yval),
+                                        pch=21,
+                                        size=5,
+                                        fill="white",
+                                        color="black") 
         }
         
         return(gplot)
-    })
+    }) # end transmission_MVT (tab 1)
   
     # the SIR model on tab 3
     dynamicSIRdata <- reactive({
@@ -414,7 +451,8 @@ server <- function(input, output) {
         f = input$dynamic_f
         n_i_t0 <- 5
         n_s_t0 <- 100
-        
+       
+        # solve over time 
         sol <- SIRImperfectVaccination::SIRsolver(
             n_susceptible_init = n_s_t0
             ,n_infected_init = n_i_t0
